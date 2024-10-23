@@ -1,115 +1,328 @@
-import type { Hash, Location, Path, Pathname, Search, To } from "history";
-import { Action as NavigationType, parsePath, createPath } from "history";
+import * as React from "react";
+import type {
+  ActionFunction,
+  ActionFunctionArgs,
+  Blocker,
+  BlockerFunction,
+  unstable_DataStrategyFunction,
+  unstable_DataStrategyFunctionArgs,
+  unstable_DataStrategyMatch,
+  unstable_DataStrategyResult,
+  ErrorResponse,
+  Fetcher,
+  HydrationState,
+  InitialEntry,
+  JsonFunction,
+  LazyRouteFunction,
+  LoaderFunction,
+  LoaderFunctionArgs,
+  Location,
+  Navigation,
+  ParamParseKey,
+  Params,
+  Path,
+  PathMatch,
+  PathParam,
+  PathPattern,
+  RedirectFunction,
+  RelativeRoutingType,
+  Router as RemixRouter,
+  FutureConfig as RouterFutureConfig,
+  ShouldRevalidateFunction,
+  ShouldRevalidateFunctionArgs,
+  To,
+  UIMatch,
+  unstable_AgnosticPatchRoutesOnNavigationFunction,
+} from "@remix-run/router";
+import {
+  AbortedDeferredError,
+  Action as NavigationType,
+  createMemoryHistory,
+  createPath,
+  createRouter,
+  defer,
+  generatePath,
+  isRouteErrorResponse,
+  json,
+  matchPath,
+  matchRoutes,
+  parsePath,
+  redirect,
+  redirectDocument,
+  replace,
+  resolvePath,
+  UNSAFE_warning as warning,
+} from "@remix-run/router";
 
 import type {
+  AwaitProps,
+  FutureConfig,
+  IndexRouteProps,
+  LayoutRouteProps,
   MemoryRouterProps,
   NavigateProps,
   OutletProps,
-  RouteProps,
   PathRouteProps,
-  LayoutRouteProps,
-  IndexRouteProps,
+  RouteProps,
   RouterProps,
+  RouterProviderProps,
   RoutesProps,
 } from "./lib/components";
 import {
-  createRoutesFromChildren,
-  renderMatches,
+  Await,
   MemoryRouter,
   Navigate,
   Outlet,
   Route,
   Router,
+  RouterProvider,
   Routes,
+  createRoutesFromChildren,
+  renderMatches,
 } from "./lib/components";
-import type { Navigator } from "./lib/context";
+import type {
+  DataRouteMatch,
+  DataRouteObject,
+  IndexRouteObject,
+  NavigateOptions,
+  Navigator,
+  NonIndexRouteObject,
+  RouteMatch,
+  RouteObject,
+} from "./lib/context";
 import {
+  DataRouterContext,
+  DataRouterStateContext,
   LocationContext,
   NavigationContext,
   RouteContext,
 } from "./lib/context";
-import type { NavigateFunction, NavigateOptions } from "./lib/hooks";
+import type { NavigateFunction } from "./lib/hooks";
 import {
+  useActionData,
+  useAsyncError,
+  useAsyncValue,
+  useBlocker,
   useHref,
   useInRouterContext,
+  useLoaderData,
   useLocation,
   useMatch,
-  useNavigationType,
+  useMatches,
   useNavigate,
+  useNavigation,
+  useNavigationType,
   useOutlet,
   useOutletContext,
   useParams,
   useResolvedPath,
+  useRevalidator,
+  useRouteError,
+  useRouteId,
+  useRouteLoaderData,
   useRoutes,
+  useRoutesImpl,
 } from "./lib/hooks";
-import type {
-  Params,
-  PathMatch,
-  PathPattern,
-  RouteMatch,
-  RouteObject,
-} from "./lib/router";
-import {
-  generatePath,
-  matchPath,
-  matchRoutes,
-  resolvePath,
-} from "./lib/router";
+
+// Exported for backwards compatibility, but not being used internally anymore
+type Hash = string;
+type Pathname = string;
+type Search = string;
 
 // Expose react-router public API
 export type {
+  ActionFunction,
+  ActionFunctionArgs,
+  AwaitProps,
+  DataRouteMatch,
+  DataRouteObject,
+  unstable_DataStrategyFunction,
+  unstable_DataStrategyFunctionArgs,
+  unstable_DataStrategyMatch,
+  unstable_DataStrategyResult,
+  ErrorResponse,
+  Fetcher,
+  FutureConfig,
   Hash,
+  IndexRouteObject,
   IndexRouteProps,
+  JsonFunction,
   LayoutRouteProps,
+  LazyRouteFunction,
+  LoaderFunction,
+  LoaderFunctionArgs,
   Location,
   MemoryRouterProps,
   NavigateFunction,
   NavigateOptions,
   NavigateProps,
+  Navigation,
+  Navigator,
+  NonIndexRouteObject,
   OutletProps,
+  ParamParseKey,
+  Params,
+  Path,
   PathMatch,
+  PathParam,
   PathPattern,
   PathRouteProps,
+  Pathname,
+  RedirectFunction,
+  RelativeRoutingType,
   RouteMatch,
   RouteObject,
   RouteProps,
   RouterProps,
+  RouterProviderProps,
   RoutesProps,
-  Navigator,
-  Params,
-  Path,
-  Pathname,
   Search,
+  ShouldRevalidateFunction,
+  ShouldRevalidateFunctionArgs,
   To,
+  UIMatch,
+  Blocker,
+  BlockerFunction,
 };
 export {
+  AbortedDeferredError,
+  Await,
   MemoryRouter,
   Navigate,
   NavigationType,
   Outlet,
   Route,
   Router,
+  RouterProvider,
   Routes,
   createPath,
   createRoutesFromChildren,
+  createRoutesFromChildren as createRoutesFromElements,
+  defer,
   generatePath,
+  isRouteErrorResponse,
+  json,
   matchPath,
   matchRoutes,
   parsePath,
+  redirect,
+  redirectDocument,
+  replace,
   renderMatches,
   resolvePath,
+  useBlocker,
+  useActionData,
+  useAsyncError,
+  useAsyncValue,
   useHref,
   useInRouterContext,
+  useLoaderData,
   useLocation,
   useMatch,
+  useMatches,
   useNavigate,
+  useNavigation,
   useNavigationType,
   useOutlet,
   useOutletContext,
   useParams,
   useResolvedPath,
+  useRevalidator,
+  useRouteError,
+  useRouteLoaderData,
   useRoutes,
 };
+
+function mapRouteProperties(route: RouteObject) {
+  let updates: Partial<RouteObject> & { hasErrorBoundary: boolean } = {
+    // Note: this check also occurs in createRoutesFromChildren so update
+    // there if you change this -- please and thank you!
+    hasErrorBoundary: route.ErrorBoundary != null || route.errorElement != null,
+  };
+
+  if (route.Component) {
+    if (__DEV__) {
+      if (route.element) {
+        warning(
+          false,
+          "You should not include both `Component` and `element` on your route - " +
+            "`Component` will be used."
+        );
+      }
+    }
+    Object.assign(updates, {
+      element: React.createElement(route.Component),
+      Component: undefined,
+    });
+  }
+
+  if (route.HydrateFallback) {
+    if (__DEV__) {
+      if (route.hydrateFallbackElement) {
+        warning(
+          false,
+          "You should not include both `HydrateFallback` and `hydrateFallbackElement` on your route - " +
+            "`HydrateFallback` will be used."
+        );
+      }
+    }
+    Object.assign(updates, {
+      hydrateFallbackElement: React.createElement(route.HydrateFallback),
+      HydrateFallback: undefined,
+    });
+  }
+
+  if (route.ErrorBoundary) {
+    if (__DEV__) {
+      if (route.errorElement) {
+        warning(
+          false,
+          "You should not include both `ErrorBoundary` and `errorElement` on your route - " +
+            "`ErrorBoundary` will be used."
+        );
+      }
+    }
+    Object.assign(updates, {
+      errorElement: React.createElement(route.ErrorBoundary),
+      ErrorBoundary: undefined,
+    });
+  }
+
+  return updates;
+}
+
+export interface unstable_PatchRoutesOnNavigationFunction
+  extends unstable_AgnosticPatchRoutesOnNavigationFunction<RouteMatch> {}
+
+export function createMemoryRouter(
+  routes: RouteObject[],
+  opts?: {
+    basename?: string;
+    future?: Partial<Omit<RouterFutureConfig, "v7_prependBasename">>;
+    hydrationData?: HydrationState;
+    initialEntries?: InitialEntry[];
+    initialIndex?: number;
+    unstable_dataStrategy?: unstable_DataStrategyFunction;
+    unstable_patchRoutesOnNavigation?: unstable_PatchRoutesOnNavigationFunction;
+  }
+): RemixRouter {
+  return createRouter({
+    basename: opts?.basename,
+    future: {
+      ...opts?.future,
+      v7_prependBasename: true,
+    },
+    history: createMemoryHistory({
+      initialEntries: opts?.initialEntries,
+      initialIndex: opts?.initialIndex,
+    }),
+    hydrationData: opts?.hydrationData,
+    routes,
+    mapRouteProperties,
+    unstable_dataStrategy: opts?.unstable_dataStrategy,
+    unstable_patchRoutesOnNavigation: opts?.unstable_patchRoutesOnNavigation,
+  }).initialize();
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // DANGER! PLEASE READ ME!
@@ -126,7 +339,12 @@ export {
 
 /** @internal */
 export {
-  NavigationContext as UNSAFE_NavigationContext,
+  DataRouterContext as UNSAFE_DataRouterContext,
+  DataRouterStateContext as UNSAFE_DataRouterStateContext,
   LocationContext as UNSAFE_LocationContext,
+  NavigationContext as UNSAFE_NavigationContext,
   RouteContext as UNSAFE_RouteContext,
+  mapRouteProperties as UNSAFE_mapRouteProperties,
+  useRouteId as UNSAFE_useRouteId,
+  useRoutesImpl as UNSAFE_useRoutesImpl,
 };

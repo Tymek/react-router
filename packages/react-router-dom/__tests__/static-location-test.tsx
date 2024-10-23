@@ -20,11 +20,11 @@ describe("A <StaticRouter>", () => {
         </StaticRouter>
       );
 
-      expect(location).toMatchObject({
+      expect(location).toEqual({
         pathname: "/the/path",
         search: "?the=query",
         hash: "#the-hash",
-        state: {},
+        state: null,
         key: expect.any(String),
       });
     });
@@ -48,11 +48,37 @@ describe("A <StaticRouter>", () => {
         </StaticRouter>
       );
 
-      expect(location).toMatchObject({
+      expect(location).toEqual({
         pathname: "/the/path",
         search: "?the=query",
         hash: "",
-        state: {},
+        state: null,
+        key: expect.any(String),
+      });
+    });
+
+    it("retains a non-null state when passed explicitly", () => {
+      let location!: ReturnType<typeof useLocation>;
+      function LocationChecker() {
+        location = useLocation();
+        return null;
+      }
+
+      ReactDOMServer.renderToStaticMarkup(
+        <StaticRouter
+          location={{ pathname: "/the/path", search: "?the=query", state: 0 }}
+        >
+          <Routes>
+            <Route path="/the/path" element={<LocationChecker />} />
+          </Routes>
+        </StaticRouter>
+      );
+
+      expect(location).toEqual({
+        pathname: "/the/path",
+        search: "?the=query",
+        hash: "",
+        state: 0,
         key: expect.any(String),
       });
     });

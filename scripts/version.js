@@ -1,40 +1,19 @@
+// FIXME: @remix-run/router isn't being automatically versioned
 const path = require("path");
 const { execSync } = require("child_process");
 const fsp = require("fs/promises");
 const chalk = require("chalk");
-const Confirm = require("prompt-confirm");
-const jsonfile = require("jsonfile");
 const semver = require("semver");
 
-const rootDir = path.resolve(__dirname, "..");
-const examplesDir = path.resolve(rootDir, "examples");
-
-/**
- * @param {string} packageName
- * @param {string} [directory]
- * @returns {string}
- */
-function packageJson(packageName, directory = "packages") {
-  return path.join(rootDir, directory, packageName, "package.json");
-}
-
-/**
- * @param {*} cond
- * @param {string} message
- * @returns {asserts cond}
- */
-function invariant(cond, message) {
-  if (!cond) throw new Error(message);
-}
-
-function ensureCleanWorkingDirectory() {
-  let status = execSync(`git status --porcelain`).toString().trim();
-  let lines = status.split("\n");
-  invariant(
-    lines.every((line) => line === "" || line.startsWith("?")),
-    "Working directory is not clean. Please commit or stash your changes."
-  );
-}
+const {
+  ensureCleanWorkingDirectory,
+  getPackageVersion,
+  invariant,
+  prompt,
+  updateExamplesPackageConfig,
+  updatePackageConfig,
+} = require("./utils");
+const { EXAMPLES_DIR } = require("./constants");
 
 /**
  * @param {string} currentVersion
@@ -42,7 +21,12 @@ function ensureCleanWorkingDirectory() {
  * @param {string} [prereleaseId]
  * @returns {string}
  */
-function getNextVersion(currentVersion, givenVersion, prereleaseId) {
+function getNextVersion(
+  currentVersion,
+  givenVersion,
+  prereleaseId,
+  isExperimental
+) {
   invariant(
     givenVersion != null,
     `Missing next version. Usage: node version.js [nextVersion]`
@@ -55,52 +39,13 @@ function getNextVersion(currentVersion, givenVersion, prereleaseId) {
     );
   }
 
-  let nextVersion = semver.inc(currentVersion, givenVersion, prereleaseId);
+  let nextVersion = isExperimental
+    ? givenVersion
+    : semver.inc(currentVersion, givenVersion, prereleaseId);
 
   invariant(nextVersion != null, `Invalid version specifier: ${givenVersion}`);
 
   return nextVersion;
-}
-
-/**
- * @param {string} question
- * @returns {Promise<string>}
- */
-async function prompt(question) {
-  let confirm = new Confirm(question);
-  let answer = await confirm.run();
-  return answer;
-}
-
-/**
- * @param {string} packageName
- */
-async function getPackageVersion(packageName) {
-  let file = packageJson(packageName);
-  let json = await jsonfile.readFile(file);
-  return json.version;
-}
-
-/**
- * @param {string} packageName
- * @param {(json: string) => any} transform
- */
-async function updatePackageConfig(packageName, transform) {
-  let file = packageJson(packageName);
-  let json = await jsonfile.readFile(file);
-  transform(json);
-  await jsonfile.writeFile(file, json, { spaces: 2 });
-}
-
-/**
- * @param {string} example
- * @param {(json: string) => any} transform
- */
-async function updateExamplesPackageConfig(example, transform) {
-  let file = packageJson(example, "examples");
-  let json = await jsonfile.readFile(file);
-  transform(json);
-  await jsonfile.writeFile(file, json, { spaces: 2 });
 }
 
 async function run() {
@@ -108,33 +53,64 @@ async function run() {
     let args = process.argv.slice(2);
     let givenVersion = args[0];
     let prereleaseId = args[1];
+    let isExperimental = givenVersion.includes("0.0.0-experimental");
 
     // 0. Make sure the working directory is clean
     ensureCleanWorkingDirectory();
 
     // 1. Get the next version number
+    let currentRouterVersion = await getPackageVersion("router");
     let currentVersion = await getPackageVersion("react-router");
     let version = semver.valid(givenVersion);
     if (version == null) {
-      version = getNextVersion(currentVersion, givenVersion, prereleaseId);
+      version = getNextVersion(
+        currentVersion,
+        givenVersion,
+        prereleaseId,
+        isExperimental
+      );
     }
 
-    // 2. Confirm the next version number
-    let answer = await prompt(
-      `Are you sure you want to bump version ${currentVersion} to ${version}? [Yn] `
-    );
+    // We will only bump the router version if this is an experimental
+    let routerVersion = currentRouterVersion;
+
+    // 2. Confirm the next version number (skip prompt on experimental CI releases)
+    let answer = isExperimental
+      ? true
+      : await prompt(
+          `Are you sure you want to bump version ${currentVersion} to ${version}? [Yn] `
+        );
 
     if (answer === false) return 0;
+
+    // We only handle @remix-run/router for experimental since in normal/pre
+    // releases it's versioned independently from the rest of the packages
+    if (isExperimental) {
+      routerVersion = version;
+      // 2.5. Update @remix-run/router version
+      await updatePackageConfig("router", (config) => {
+        config.version = routerVersion;
+      });
+      console.log(
+        chalk.green(`  Updated @remix-run/router to version ${version}`)
+      );
+    }
 
     // 3. Update react-router version
     await updatePackageConfig("react-router", (config) => {
       config.version = version;
+      if (isExperimental) {
+        config.dependencies["@remix-run/router"] = routerVersion;
+      }
     });
     console.log(chalk.green(`  Updated react-router to version ${version}`));
 
     // 4. Update react-router-dom version + react-router dep
     await updatePackageConfig("react-router-dom", (config) => {
       config.version = version;
+      if (isExperimental) {
+        config.dependencies["@remix-run/router"] = routerVersion;
+      }
       config.dependencies["react-router"] = version;
     });
     console.log(
@@ -160,21 +136,42 @@ async function run() {
     );
 
     // 6. Update react-router and react-router-dom versions in the examples
-    let examples = await fsp.readdir(examplesDir);
+    let examples = await fsp.readdir(EXAMPLES_DIR);
     for (const example of examples) {
-      let stat = await fsp.stat(path.join(examplesDir, example));
+      let stat = await fsp.stat(path.join(EXAMPLES_DIR, example));
       if (!stat.isDirectory()) continue;
 
       await updateExamplesPackageConfig(example, (config) => {
-        config.dependencies["react-router"] = version;
-        config.dependencies["react-router-dom"] = version;
+        if (config.dependencies["@remix-run/router"]) {
+          config.dependencies["@remix-run/router"] = routerVersion;
+        }
+        if (config.dependencies["react-router"]) {
+          config.dependencies["react-router"] = version;
+        }
+        if (config.dependencies["react-router-dom"]) {
+          config.dependencies["react-router-dom"] = version;
+        }
       });
     }
 
-    // 7. Commit and tag
+    // 7. Sync up the pnpm-lock.yaml for pnpm if this is an experimental release
+    if (isExperimental) {
+      console.log(chalk.green("  Syncing pnpm lockfile..."));
+      execSync("pnpm install --no-frozen-lockfile");
+    }
+
+    // 8. Commit and tag
     execSync(`git commit --all --message="Version ${version}"`);
     execSync(`git tag -a -m "Version ${version}" v${version}`);
     console.log(chalk.green(`  Committed and tagged version ${version}`));
+
+    if (!isExperimental) {
+      console.log(
+        chalk.red(
+          `  🚨 @remix-run/router isn't handled by this script, do it manually!`
+        )
+      );
+    }
   } catch (error) {
     console.log();
     console.error(chalk.red(`  ${error.message}`));

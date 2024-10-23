@@ -1,11 +1,12 @@
+.DS_Store
 npm-debug.log
 
-/build/
 /docs/api/
 /website/build/
 node_modules/
 
 /examples/*/yarn.lock
+/examples/*/pnpm-lock.yaml
 /examples/*/dist
 /tutorial/dist
 
@@ -14,7 +15,14 @@ node_modules/
 /packages/*/esm/
 /packages/*/umd/
 
+# v6 build files
+/build/
+/packages/*/dist/
+/packages/*/LICENSE.md
+
 # compat module copies
 /packages/react-router-dom-v5-compat/react-router-dom
 
 .eslintcache
+/.env
+/NOTES.md

@@ -30,11 +30,15 @@ cd react-router
 git checkout dev
 ```
 
-3. Install dependencies and build. React Router uses [`yarn` (version 1)](https://classic.yarnpkg.com/lang/en/docs/install), so you should too. If you install using `npm`, unnecessary `package-lock.json` files will be generated.
+3. Install dependencies and build. React Router uses [pnpm](https://pnpm.io), so you should too. If you install using `npm`, unnecessary `package-lock.json` files will be generated.
 
 ## Think You Found a Bug?
 
 Please conform to the issue template and provide a clear path to reproduction with a code example. Best is a pull request with a failing test. Next best is a link to CodeSandbox or repository that illustrates the bug.
+
+## Adding an Example?
+
+Examples can be added directly to the main branch. Create a branch off of your local clone of main. Once you've finished, create a pull request and outline your example.
 
 ## Proposing New or Changed API?
 
@@ -50,9 +54,7 @@ If you need a bug fixed and nobody is fixing it, your best bet is to provide a f
 
 Pull requests need only the approval of two or more collaborators to be merged; when the PR author is a collaborator, that counts as one.
 
-> **Important:** When creating the PR in GitHub, make sure that you set the base to the correct branch. If you are submitting a PR that touches any code, this should be the `dev` branch. You set the base in GitHub when authoring the PR with the dropdown below the "Compare changes" heading:
->
-> <img src="https://raw.githubusercontent.com/remix-run/react-router/main/static/base-branch.png" alt="" width="460" height="350" />
+<docs-warning>When creating the PR in GitHub, make sure that you set the base to the correct branch. If you are submitting a PR that touches any code, this should be the `dev` branch. You set the base in GitHub when authoring the PR with the dropdown below the "Compare changes" heading: <img src="https://raw.githubusercontent.com/remix-run/react-router/main/static/base-branch.png" alt="" width="460" height="350" /></docs-warning>
 
 ### Tests
 
@@ -70,22 +72,22 @@ All commits that change or add to the API must be done in a pull request that al
 
 React Router uses a monorepo to host code for multiple packages. These packages live in the `packages` directory.
 
-We use [Yarn workspaces](https://classic.yarnpkg.com/en/docs/workspaces/) to manage installation of dependencies and running various scripts. To get everything installed, make sure you have [Yarn (version 1) installed](https://classic.yarnpkg.com/lang/en/docs/install), and then run `yarn` or `yarn install` from the repo root.
+We use [pnpm workspaces](https://pnpm.io/workspaces/) to manage installation of dependencies and running various scripts. To get everything installed, make sure you have [pnpm installed](https://pnpm.io/installation), and then run `pnpm install` from the repo root.
 
 ### Building
 
-Calling `yarn build` from the root directory will run the build, which should take only a few seconds. It's important to build all the packages together because `react-router-dom` and `react-router-native` both use `react-router` as a dependency.
+Calling `pnpm build` from the root directory will run the build, which should take only a few seconds. It's important to build all the packages together because `react-router-dom` and `react-router-native` both use `react-router` as a dependency.
 
 ### Testing
 
-Before running the tests, you need to run a build. After you build, running `yarn test` from the root directory will run **every** package's tests. If you want to run tests for a specific package, use `yarn test --projects packages/<package-name>`:
+Before running the tests, you need to run a build. After you build, running `pnpm test` from the root directory will run **every** package's tests. If you want to run tests for a specific package, use `pnpm test --projects packages/<package-name>`:
 
 ```bash
 # Test all packages
-yarn test
+pnpm test
 
 # Test only react-router-dom
-yarn test --projects packages/react-router-dom
+pnpm test --projects packages/react-router-dom
 ```
 
 ## Repository Branching
@@ -109,7 +111,7 @@ When it's time to cut a new release, we follow a process based on our branching 
 We create experimental releases from the current state of the `dev` branch. They can be installed by using the `@next` tag:
 
 ```bash
-yarn add react-router-dom@next
+pnpm add react-router-dom@next
 # or
 npm install react-router-dom@next
 ```
@@ -131,7 +133,7 @@ git checkout -b release/v6.1.0
 
 # Create a new tag and update version references throughout the
 # codebase.
-yarn run version minor # | "patch" | "major"
+pnpm run version minor # | "patch" | "major"
 
 # Push the release branch along with the new release tag.
 git push origin release/v6.1.0 --follow-tags
@@ -158,11 +160,11 @@ Sometimes we have a crucial bug that needs to be patched right away. If the bug 
 ```bash
 # From the main branch, make sure to run the build and all tests
 # before creating a new release.
-yarn && yarn build && yarn test
+pnpm install && pnpm build && pnpm test
 
 # Assuming the tests pass, create the release tag and update
 # version references throughout the codebase.
-yarn run version patch
+pnpm run version patch
 
 # Push changes along with the new release tag.
 git push origin main --follow-tags

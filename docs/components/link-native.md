@@ -1,13 +1,10 @@
 ---
-title: Link (React Native)
+title: Link (RN)
 ---
 
 # `<Link>` (React Native)
 
-> **Note:**
->
-> This is the React Native version of `<Link>`. For the web version,
-> [go here][link].
+<docs-info>This is the React Native version of `<Link>`. For the web version, [go here][link].</docs-info>
 
 <details>
   <summary>Type declaration</summary>
@@ -37,10 +34,12 @@ function Home() {
   return (
     <View>
       <Text>Welcome!</Text>
-      <Link to="/profile">Visit your profile</Link>
+      <Link to="/profile">
+        <Text>Visit your profile</Text>
+      </Link>
     </View>
   );
 }
 ```
 
-[link]: ./link-native
+[link]: ./link

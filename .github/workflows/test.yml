@@ -1,38 +1,67 @@
-name: test
+name: 🧪 Test
+
 on:
   push:
     branches:
-      - "**"
+      - main
+      - dev
     tags-ignore:
       - v*
     paths-ignore:
       - "docs/**"
       - "**/README.md"
   pull_request:
-    types: [opened, synchronize]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
+    name: "🧪 Test: (Node: ${{ matrix.node }})"
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - 16
+          - 18
+
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - name: ⬇️ Checkout repo
+        uses: actions/checkout@v4
 
-      - name: Set up Node
-        uses: actions/setup-node@v2
+      - name: 📦 Setup pnpm
+        uses: pnpm/action-setup@v3.0.0
+
+      - name: ⎔ Setup node
+        uses: actions/setup-node@v4
         with:
-          node-version: 14
+          cache: pnpm
           check-latest: true
-          cache: yarn
+          node-version: ${{ matrix.node }}
 
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
+      - name: Disable GitHub Actions Annotations
+        run: |
+          echo "::remove-matcher owner=tsc::"
+          echo "::remove-matcher owner=eslint-compact::"
+          echo "::remove-matcher owner=eslint-stylish::"
 
-      - name: Build
-        run: yarn build
+      - name: 📥 Install deps
+        run: pnpm install --frozen-lockfile
 
-      - name: Test
-        run: yarn test
+      - name: 🏗 Build
+        run: pnpm build
+
+      - name: 🔬 Lint
+        run: pnpm lint
+
+      - name: 🧪 Run tests
+        run: pnpm test
 
       - name: Check bundle size
-        run: yarn size
+        run: pnpm size
